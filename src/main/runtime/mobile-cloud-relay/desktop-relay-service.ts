@@ -8,6 +8,7 @@ import type {
   PairingProvisionRelayParams
 } from '../../../shared/remote-runtime/relay/mobile-relay-credential-contract'
 import type { RelayHostCloseReason } from '../../../shared/remote-runtime/relay/relay-host-close-reason'
+import { readRelayAuthContext } from './authentication/relay-auth-context'
 import { relayIdentityKey } from './authentication/relay-auth-identity'
 import { RelayAuthCoordinator } from './authentication/relay-auth-coordinator'
 import { RelayUnavailableError } from './authentication/relay-readiness'
@@ -24,6 +25,7 @@ import { RelayDemandLedger } from './demand/relay-demand-ledger'
 import { createRelayRegionPreferenceReader } from './region-selection/relay-region-preference-reader'
 import { createCustomRelayPairing, CustomRelayBrokerCache } from './custom-relay-broker'
 import { routeMobileRelayEndpoints, routeMobileRelayProvision } from './mobile-pairing-routing'
+import { readMobilePairingCloudflareRelayUrl } from '../../../shared/remote-runtime/pairing/mobile-pairing-connection-mode'
 
 type DesktopRelayServiceOptions = {
   authConfig: OrcaCloudAuthConfig
@@ -170,6 +172,8 @@ export class DesktopRelayService {
       params,
       waitMs: PHONE_REQUEST_READINESS_WAIT_MS,
       requireCustomBroker: (url) => this.requireCustomBroker(url),
+      getCloudflareRelayUrl: () =>
+        readMobilePairingCloudflareRelayUrl(this.runtimeRpc.requireStore().getSettings()),
       requireActiveBroker: (waitMs) => this.requireActiveBroker(waitMs),
       withTransientDemand: (key, operation) => this.withTransientDemand(key, operation),
       assertRelayHost: (relayContext, broker) => this.assertRelayHost(relayContext, broker)

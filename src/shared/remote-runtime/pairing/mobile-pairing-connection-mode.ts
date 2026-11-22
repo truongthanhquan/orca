@@ -41,6 +41,16 @@ export function canonicalMobilePairingCloudflareRelayUrl(
   return trimmed
 }
 
+export function readMobilePairingCloudflareRelayUrl(settings: object): string | undefined {
+  if (
+    'mobilePairingCloudflareRelayUrl' in settings &&
+    typeof settings.mobilePairingCloudflareRelayUrl === 'string'
+  ) {
+    return settings.mobilePairingCloudflareRelayUrl
+  }
+  return undefined
+}
+
 export function normalizeMobilePairingConnectionMode(
   value: MobilePairingConnectionMode | null | undefined
 ): MobilePairingConnectionMode {

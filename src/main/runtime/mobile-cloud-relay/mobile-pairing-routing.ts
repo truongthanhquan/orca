@@ -16,7 +16,7 @@ export async function getCustomMobileRelayEndpoints(args: {
   context: MobilePairingConnectionContext
   params: PairingGetEndpointsParams
   requireCustomBroker: (url: string) => Promise<RelaySessionBroker>
-  requireActiveBroker: (waitMs: number) => Promise<RelaySessionBroker>
+  getCloudflareRelayUrl: () => string | undefined
   withTransientDemand: <T>(key: string, operation: () => Promise<T>) => Promise<T>
   assertRelayHost: (context: MobilePairingConnectionContext, broker: RelaySessionBroker) => void
 }): Promise<PairingGetEndpointsResult | null> {
@@ -24,9 +24,7 @@ export async function getCustomMobileRelayEndpoints(args: {
     .getDeviceRegistry()
     ?.getMobilePairingConnectionMode(args.context.deviceId)
   if (mode === 'cloudflare-relay') {
-    const url = canonicalMobilePairingCloudflareRelayUrl(
-      args.runtimeRpc.requireStore().getSettings().mobilePairingCloudflareRelayUrl
-    )
+    const url = canonicalMobilePairingCloudflareRelayUrl(args.getCloudflareRelayUrl())
     if (url === null) {
       return { v: 1, relay: null }
     }
@@ -47,7 +45,7 @@ export async function provisionCustomMobileRelay(args: {
   context: MobilePairingConnectionContext
   params: PairingProvisionRelayParams
   requireCustomBroker: (url: string) => Promise<RelaySessionBroker>
-  requireActiveBroker: (waitMs: number) => Promise<RelaySessionBroker>
+  getCloudflareRelayUrl: () => string | undefined
   withTransientDemand: <T>(key: string, operation: () => Promise<T>) => Promise<T>
   assertRelayHost: (context: MobilePairingConnectionContext, broker: RelaySessionBroker) => void
 }): Promise<DeviceCredentialInstalled | null> {
@@ -55,9 +53,7 @@ export async function provisionCustomMobileRelay(args: {
     .getDeviceRegistry()
     ?.getMobilePairingConnectionMode(args.context.deviceId)
   if (mode === 'cloudflare-relay') {
-    const url = canonicalMobilePairingCloudflareRelayUrl(
-      args.runtimeRpc.requireStore().getSettings().mobilePairingCloudflareRelayUrl
-    )
+    const url = canonicalMobilePairingCloudflareRelayUrl(args.getCloudflareRelayUrl())
     if (url === null) {
       throw new Error('relay_disabled_for_device')
     }
@@ -76,6 +72,7 @@ export async function routeMobileRelayProvision(args: {
   params: PairingProvisionRelayParams
   waitMs: number
   requireCustomBroker: (url: string) => Promise<RelaySessionBroker>
+  getCloudflareRelayUrl: () => string | undefined
   requireActiveBroker: (waitMs: number) => Promise<RelaySessionBroker>
   withTransientDemand: <T>(key: string, operation: () => Promise<T>) => Promise<T>
   assertRelayHost: (context: MobilePairingConnectionContext, broker: RelaySessionBroker) => void
@@ -87,7 +84,8 @@ export async function routeMobileRelayProvision(args: {
     params: args.params,
     requireCustomBroker: args.requireCustomBroker,
     withTransientDemand: args.withTransientDemand,
-    assertRelayHost: args.assertRelayHost
+    assertRelayHost: args.assertRelayHost,
+    getCloudflareRelayUrl: args.getCloudflareRelayUrl
   })
   if (custom !== null) {
     return custom
@@ -121,6 +119,7 @@ export async function routeMobileRelayEndpoints(args: {
   params: PairingGetEndpointsParams
   waitMs: number
   requireCustomBroker: (url: string) => Promise<RelaySessionBroker>
+  getCloudflareRelayUrl: () => string | undefined
   requireActiveBroker: (waitMs: number) => Promise<RelaySessionBroker>
   withTransientDemand: <T>(key: string, operation: () => Promise<T>) => Promise<T>
   assertRelayHost: (context: MobilePairingConnectionContext, broker: RelaySessionBroker) => void
@@ -131,7 +130,8 @@ export async function routeMobileRelayEndpoints(args: {
     params: args.params,
     requireCustomBroker: args.requireCustomBroker,
     withTransientDemand: args.withTransientDemand,
-    assertRelayHost: args.assertRelayHost
+    assertRelayHost: args.assertRelayHost,
+    getCloudflareRelayUrl: args.getCloudflareRelayUrl
   })
   if (custom !== null) {
     return custom

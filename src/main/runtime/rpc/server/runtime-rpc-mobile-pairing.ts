@@ -1,5 +1,6 @@
 import {
   canonicalMobilePairingCloudflareRelayUrl,
+  readMobilePairingCloudflareRelayUrl,
   normalizeMobilePairingConnectionMode,
   type MobilePairingConnectionMode
 } from '../../../../shared/remote-runtime/pairing/mobile-pairing-connection-mode'
@@ -114,9 +115,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     },
     generation: number
   ): Promise<MobilePairingOffer> {
-    // Renderer input is untrusted; only explicit local-only may suppress Relay provisioning.
     const connectionMode = normalizeMobilePairingConnectionMode(args.connectionMode)
-    // Expired offers leave through discard so their Relay invites are revoked too.
     for (const expired of this.deviceRegistry?.listExpiredPairingOffers('mobile') ?? []) {
       this.discardPendingMobilePairingDevice(expired.deviceId)
     }
@@ -130,7 +129,6 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       pending != null &&
       this.deviceRegistry?.getMobilePairingConnectionMode(pending.deviceId) !== connectionMode
     if (args.rotate || switchingPendingMode) {
-      // Durably enqueue cloud revocation for every offer rotation drops, or old invites outlive the QR.
       for (const offer of this.deviceRegistry?.listPendingDevices('mobile') ?? []) {
         if (offer.relayBinding && !this.queueRelayDeviceRevoke(offer.relayBinding)) {
           return pairingUnavailable(
@@ -148,7 +146,6 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     if (!direct.available) {
       return direct
     }
-    const createdNewPendingDevice = pending?.deviceId !== direct.deviceId
     let connectionModeStored = false
     try {
       connectionModeStored =
@@ -157,9 +154,8 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     } catch (error) {
       console.error('[runtime] Failed to persist the pairing connection mode:', error)
     }
-    // Persist credential mode or refuse; a QR must never pair under an unstored default policy.
     if (!connectionModeStored) {
-      if (createdNewPendingDevice) {
+      if (pending?.deviceId !== direct.deviceId) {
         this.discardPendingMobilePairingDevice(direct.deviceId)
       }
       return pairingUnavailable('device_registry_unavailable', DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE)
@@ -169,7 +165,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     }
     const cloudflareRelayUrl = canonicalMobilePairingCloudflareRelayUrl(
       connectionMode === 'cloudflare-relay'
-        ? this.runtime.requireStore().getSettings().mobilePairingCloudflareRelayUrl
+        ? readMobilePairingCloudflareRelayUrl(this.runtime.requireStore().getSettings())
         : null
     )
     if (connectionMode === 'cloudflare-relay' && cloudflareRelayUrl === null) {
@@ -181,7 +177,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     const refuseAutomaticWithoutRelay = (
       relayFailure: MobileRelayMintFailure
     ): PairingOfferUnavailable => {
-      if (createdNewPendingDevice) {
+      if (pending?.deviceId !== direct.deviceId) {
         this.discardPendingMobilePairingDevice(direct.deviceId)
       }
       return {
@@ -240,7 +236,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       this.deviceRegistry?.getMobilePairingConnectionMode(device.deviceId) !== connectionMode
     ) {
       this.queueOrRetainRelayDeviceRevoke(device.deviceId, relayPairing.binding)
-      if (createdNewPendingDevice) {
+      if (pending?.deviceId !== direct.deviceId) {
         this.discardPendingMobilePairingDevice(direct.deviceId)
       }
       return this.relayPairingRequestSuperseded()

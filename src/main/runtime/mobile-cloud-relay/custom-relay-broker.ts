@@ -44,9 +44,7 @@ export async function openCustomRelayBroker(args: {
     isCurrent: () => true,
     refreshAccessToken: async (authOrigin) => {
       const refreshed = await readRelayAuthContext(customAuthConfig, args.userDataPath, authOrigin)
-      return refreshed
-        ? { accessToken: refreshed.accessToken }
-        : { accessToken: null, hostCloseReason: 'relay_signed_out' }
+      return refreshed ? { accessToken: refreshed.accessToken } : { accessToken: null }
     },
     onSelfClose: args.onClosed,
     onStatus: args.onStatus
@@ -69,14 +67,17 @@ export async function createCustomRelayPairing(
   }
 }
 
-export function customRelayEndpoints(
+export async function customRelayEndpoints(
   broker: RelaySessionBroker,
   context: MobilePairingConnectionContext,
   params: PairingGetEndpointsParams
-): PairingGetEndpointsResult {
+): Promise<PairingGetEndpointsResult> {
   const result: PairingGetEndpointsResult = { v: 1, relay: broker.endpoint }
   if (params.installReqId) {
-    result.installStatus = broker.credentialInstallStatus(context.deviceId, params.installReqId)
+    result.installStatus = await broker.credentialInstallStatus(
+      context.deviceId,
+      params.installReqId
+    )
   }
   return result
 }
