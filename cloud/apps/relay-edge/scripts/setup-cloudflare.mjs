@@ -1,6 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { resolve, dirname } from 'node:path'
+import { resolve } from 'node:path'
 
 const args = new Map()
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -75,7 +74,7 @@ if (domain) {
   try {
     const parsed = new URL(`https://${domain}`)
     if (parsed.hostname !== domain || parsed.username || parsed.password || parsed.port) {
-      throw new Error()
+      throw new Error('invalid domain')
     }
     hostname = parsed.hostname
   } catch {
@@ -88,7 +87,7 @@ if (edgeDomain) {
   try {
     const parsed = new URL(`https://${edgeDomain}`)
     if (parsed.hostname !== edgeDomain || parsed.username || parsed.password || parsed.port) {
-      throw new Error()
+      throw new Error('invalid edge domain')
     }
     edgeHostname = parsed.hostname
   } catch {
@@ -151,7 +150,7 @@ const output = `{
 }
 `
 
-const target = resolve(dirname(fileURLToPath(import.meta.url)), '..', '.wrangler-deploy-cloudflare.jsonc')
+const target = resolve(import.meta.dirname, '..', '.wrangler-deploy-cloudflare.jsonc')
 await writeFile(target, output, { encoding: 'utf8', mode: 0o600 })
 
 console.log(`Wrote ${target}`)
