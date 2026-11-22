@@ -42,6 +42,19 @@ The mobile app is intentionally not a full editor — it's a remote control for 
 1. Prefer **Orca Relay** for pairing when it is available — sign-in is required for Relay only. The local network address picker is optional on Relay (expand it when you want a LAN fast path); LAN pairing still needs an address.
 1. The pairing exchange establishes a device token for that phone; keep desktop reachable on the path you chose.
 
+### Cloudflare relay
+
+The existing iOS and Android apps can connect through a compatible Cloudflare Relay
+deployment. They open the same secure `wss://` WebSocket routes and use the same
+relay-v1 pairing and end-to-end encrypted framing as the hosted Orca Relay.
+
+No mobile-app rebuild is needed. A generic WebSocket endpoint or a Cloudflare Worker
+that does not implement Orca relay-v1 is not compatible. The relay must implement
+`/v1/host/control`, `/v1/connect/<relay-host-id>`, and
+`/v1/host/data/<connection-id>` and use the matching credentials and director.
+
+To host a compatible relay, follow [Deploying the relay on Cloudflare](/docs/cloudflare-relay).
+
 Closing the desktop app drops a direct/LAN session until you reopen it. Relay-backed pairing follows the desktop Relay connection — reopen desktop if the host goes offline.
 
 Current desktop UI pairing offers expire after 10 minutes for mobile and one hour for runtime clients. A paired device's authorization persists beyond the offer's expiry until revoked. Headless offers and older versions can have different lifetimes; do not assume every code is single-use or expires automatically. Regenerate an unused code if it may have been exposed.
