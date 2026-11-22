@@ -111,13 +111,7 @@ export async function routeMobileRelayProvision(args: {
     if (!args.setRelayBinding(args.context, broker)) {
       throw new Error('mobile_device_not_found')
     }
-    return await broker.installCredential({
-      relayDeviceId: args.context.deviceId,
-      authorization,
-      reqId: args.params.reqId,
-      newResumeTokenHash: args.params.newResumeTokenHash,
-      expectedCurrentHash: args.params.expectedCurrentHash
-    })
+    return await broker.installCredential(args.context.deviceId, args.params, authorization)
   })
 }
 

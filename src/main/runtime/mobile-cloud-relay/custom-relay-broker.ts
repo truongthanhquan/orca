@@ -93,13 +93,7 @@ export async function provisionCustomRelay(
   if (!authorization) {
     throw new Error('relay_provision_authorization_unavailable')
   }
-  return await broker.installCredential({
-    relayDeviceId: context.deviceId,
-    authorization,
-    reqId: params.reqId,
-    newResumeTokenHash: params.newResumeTokenHash,
-    expectedCurrentHash: params.expectedCurrentHash
-  })
+  return await broker.installCredential(context.deviceId, params, authorization)
 }
 
 export class CustomRelayBrokerCache {
