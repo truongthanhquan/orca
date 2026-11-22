@@ -70,6 +70,11 @@ backend configuration, operator tools, runbooks, broker image assembly, and depl
 workflows live in the private `stablyai/orca-cloud` repository. That repository pins
 an immutable public source revision and combines it with its deployment configuration.
 
+For a Cloudflare-hosted deployment, use the public Worker in `apps/relay-edge`.
+See [Deploying the relay on Cloudflare](docs/cloudflare-relay.md) for account setup,
+`wrangler` configuration, security requirements, and compatibility with the existing
+mobile app.
+
 `Cloud Verify` here builds and tests public runtime code, audits dependencies, scans
 relay and push images, and checks for secrets without cloud credentials. Private CI
 also validates Terraform, scans the SQL proxy and broker, and runs deployment contracts.

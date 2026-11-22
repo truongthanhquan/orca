@@ -1,0 +1,71 @@
+---
+title: Deploy a mobile relay on Cloudflare
+description: Deploy Orca Relay-compatible Cloudflare Workers WebSockets for the existing iOS and Android app.
+---
+
+The public Orca repository includes a Cloudflare Worker relay for desktop and mobile
+connections. Existing mobile app store builds can use it without rebuilding:
+
+- the mobile app accepts canonical `https://` relay origins in the pairing offer;
+- it opens `wss://` WebSocket routes;
+- it uses Orca's relay-v1 authentication and encrypted frame protocol.
+
+A different WebSocket endpoint is not enough. The Cloudflare deployment must implement
+`/v1/host/control`, `/v1/connect/<relay-host-id>`, and
+`/v1/host/data/<connection-id>`, plus the matching JWT, director, database, and
+Durable Object state.
+
+## Account setup
+
+1. Create a [Cloudflare account](https://dash.cloudflare.com/) and add your domain.
+2. Enable Durable Objects and create a Hyperdrive Postgres binding.
+3. Apply the Orca relay Postgres schema.
+4. Authenticate Wrangler and generate the public relay deployment config:
+
+```sh
+cd cloud
+pnpm install
+pnpm --filter @orca-cloud/relay-edge exec wrangler login
+pnpm --filter @orca-cloud/relay-edge setup:cloudflare \
+  --account-id <CLOUDFLARE_ACCOUNT_ID> \
+  --worker-name orca-relay-edge \
+  --domain relay.example.com \
+  --edge-domain edge.relay.example.com \
+  --hyperdrive-id <HYPERDRIVE_CONFIGURATION_ID> \
+  --jwks-url https://login.example.com/.well-known/jwks.json \
+  --auth-issuer https://login.example.com \
+  --audience orca-relay \
+  --admin-issuer https://director.example.com
+```
+
+The setup script writes an ignored deploy config:
+`cloud/apps/relay-edge/.wrangler-deploy-cloudflare.jsonc`.
+
+## Secrets and deploy
+
+Add private signing and ingress secrets through Wrangler:
+
+```sh
+cd cloud/apps/relay-edge
+pnpm exec wrangler secret put ADMIN_SIGNING_KEY --config .wrangler-deploy-cloudflare.jsonc
+```
+
+Deploy and verify:
+
+```sh
+cd cloud
+pnpm --filter @orca-cloud/relay-edge deploy:cloudflare
+curl https://relay.example.com/health
+```
+
+Set the desktop build environment:
+
+```sh
+ORCA_RELAY_URL=https://relay.example.com
+```
+
+Use the existing desktop **Orca Relay** pairing option. Then pair with the current
+iOS or Android app; no app rebuild or store update is required for Cloudflare support.
+
+Full infrastructure and security details are in
+[`cloud/docs/cloudflare-relay.md`](https://github.com/truongthanhquan/orca/blob/main/cloud/docs/cloudflare-relay.md).
