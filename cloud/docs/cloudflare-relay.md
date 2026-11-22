@@ -46,6 +46,7 @@ pnpm --filter @orca-cloud/relay-edge setup:cloudflare \
   --account-id <CLOUDFLARE_ACCOUNT_ID> \
   --worker-name orca-relay-edge \
   --domain relay.example.com \
+  --edge-domain edge.relay.example.com \
   --hyperdrive-id <HYPERDRIVE_CONFIGURATION_ID> \
   --jwks-url https://login.example.com/.well-known/jwks.json \
   --auth-issuer https://login.example.com \

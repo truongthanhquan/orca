@@ -52,6 +52,7 @@ function httpsUrl(value, name) {
 const accountId = required('account-id')
 const workerName = required('worker-name')
 const domain = envOrArg('domain')
+const edgeDomain = envOrArg('edge-domain') || (domain ? `edge.${domain}` : '')
 const hyperdriveId = required('hyperdrive-id')
 const jwksUrl = httpsUrl(required('jwks-url'), 'jwks-url')
 const authIssuer = httpsOrigin(required('auth-issuer'), 'auth-issuer')
@@ -82,8 +83,28 @@ if (domain) {
   }
 }
 
+let edgeHostname = ''
+if (edgeDomain) {
+  try {
+    const parsed = new URL(`https://${edgeDomain}`)
+    if (parsed.hostname !== edgeDomain || parsed.username || parsed.password || parsed.port) {
+      throw new Error()
+    }
+    edgeHostname = parsed.hostname
+  } catch {
+    throw new Error('--edge-domain must be a hostname without scheme or port')
+  }
+}
+
+if (hostname && (!edgeHostname || edgeHostname === hostname)) {
+  throw new Error('--edge-domain must differ from --domain')
+}
+
 const routes = hostname
-  ? `,\n  "routes": [{ "pattern": ${JSON.stringify(hostname)}, "custom_domain": true }]`
+  ? `,\n  "routes": [
+    { "pattern": ${JSON.stringify(hostname)}, "custom_domain": true },
+    ${edgeHostname ? `{ "pattern": ${JSON.stringify(edgeHostname)}, "custom_domain": true }` : ''}
+  ]`
   : ''
 
 const output = `{
@@ -123,7 +144,9 @@ const output = `{
     "ADMIN_ISSUER": ${JSON.stringify(adminIssuer)},
     "PING_INTERVAL_MS": "30000",
     "SILENCE_TIMEOUT_MS": "75000",
-    "ORPHAN_GRACE_MS": "30000"
+    "ORPHAN_GRACE_MS": "30000"${hostname && edgeHostname ? `,
+    "DIRECTOR_HOSTNAME": ${JSON.stringify(hostname)},
+    "DIRECTOR_EDGE_URL": ${JSON.stringify(`https://${edgeHostname}`)}` : ''}
   }${routes}
 }
 `
