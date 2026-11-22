@@ -1,4 +1,8 @@
-import type { MobilePairingConnectionMode } from '../../../../shared/remote-runtime/pairing/mobile-pairing-connection-mode'
+import {
+  canonicalMobilePairingCloudflareRelayUrl,
+  normalizeMobilePairingConnectionMode,
+  type MobilePairingConnectionMode
+} from '../../../../shared/remote-runtime/pairing/mobile-pairing-connection-mode'
 import {
   mobileRelayMintFailureFromUnknown,
   type MobileRelayMintFailure
@@ -18,7 +22,6 @@ import {
   type PairingOfferUnavailable
 } from './runtime-rpc-pairing-types'
 
-// How long an automatic mint waits for an on-demand Relay install before reporting it missing.
 const RELAY_PROVIDER_INSTALL_WAIT_MS = 15_000
 
 export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
@@ -42,7 +45,10 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     offerTtlMs?: number
     createdByDeviceId?: string
   }): Promise<MobilePairingOffer> {
-    // Network pairing opts into LAN exposure: widen before advertising QR endpoints; failed widening stays unavailable on loopback (STA-2370).
+    if (args.connectionMode === 'cloudflare-relay') {
+      this.mobilePairingOfferGeneration += 1
+      return this.createMobilePairingOfferSerial(args, this.mobilePairingOfferGeneration)
+    }
     try {
       await this.ensureNetworkExposure()
     } catch (error) {
@@ -56,18 +62,15 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       this.mobilePairingOfferGeneration += 1
       return this.createMobilePairingOfferSerial(args, this.mobilePairingOfferGeneration)
     }
-    const address = args.address ?? null
-    const rotate = args.rotate === true
     const inFlight = this.mobileRelayPairingOfferInFlight
     if (
       inFlight?.generation === this.mobilePairingOfferGeneration &&
-      inFlight.address === address &&
+      inFlight.address === (args.address ?? null) &&
       inFlight.createdByDeviceId === args.createdByDeviceId &&
-      (inFlight.rotate || !rotate)
+      (inFlight.rotate || args.rotate !== true)
     ) {
       return inFlight.request
     }
-    // Why: every request that is not coalesced above supersedes the older one, rotating or not.
     const generation = ++this.mobilePairingOfferGeneration
     const request = this.mobileRelayPairingOfferQueue.then(() =>
       generation === this.mobilePairingOfferGeneration
@@ -80,8 +83,8 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     )
     this.mobileRelayPairingOfferInFlight = {
       generation,
-      address,
-      rotate,
+      address: args.address ?? null,
+      rotate: args.rotate === true,
       createdByDeviceId: args.createdByDeviceId,
       request
     }
@@ -112,7 +115,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     generation: number
   ): Promise<MobilePairingOffer> {
     // Renderer input is untrusted; only explicit local-only may suppress Relay provisioning.
-    const connectionMode = args.connectionMode === 'local-only' ? 'local-only' : 'automatic'
+    const connectionMode = normalizeMobilePairingConnectionMode(args.connectionMode)
     // Expired offers leave through discard so their Relay invites are revoked too.
     for (const expired of this.deviceRegistry?.listExpiredPairingOffers('mobile') ?? []) {
       this.discardPendingMobilePairingDevice(expired.deviceId)
@@ -123,7 +126,6 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       [],
       args.createdByDeviceId
     )
-    // Rotate when connection policy changes so old QR credentials retain no new-policy authority.
     const switchingPendingMode =
       pending != null &&
       this.deviceRegistry?.getMobilePairingConnectionMode(pending.deviceId) !== connectionMode
@@ -162,11 +164,20 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       }
       return pairingUnavailable('device_registry_unavailable', DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE)
     }
-    // Why: explicit LAN path never needs Relay; mint the direct-only offer as selected.
     if (connectionMode === 'local-only') {
       return { ...direct, connectionMode: 'local-only' }
     }
-    // Anywhere cannot silently become LAN-only; remove unused pending credentials and let UI offer LAN explicitly.
+    const cloudflareRelayUrl = canonicalMobilePairingCloudflareRelayUrl(
+      connectionMode === 'cloudflare-relay'
+        ? this.runtime.requireStore().getSettings().mobilePairingCloudflareRelayUrl
+        : null
+    )
+    if (connectionMode === 'cloudflare-relay' && cloudflareRelayUrl === null) {
+      return pairingUnavailable(
+        'relay_mint_failed',
+        'Set the My Cloudflare Relay director URL in Settings → Mobile before pairing.'
+      )
+    }
     const refuseAutomaticWithoutRelay = (
       relayFailure: MobileRelayMintFailure
     ): PairingOfferUnavailable => {
@@ -182,7 +193,6 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       }
     }
     if (!this.mobileRelayPairingProvider && this.mobileRelayPairingProviderInstaller) {
-      // Bounded: the install waits for the persisted proxy, which has no time limit of its own.
       await withTimeout(
         this.mobileRelayPairingProviderInstaller(),
         RELAY_PROVIDER_INSTALL_WAIT_MS,
@@ -208,9 +218,11 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     }
     let relayPairing: Awaited<ReturnType<MobileRelayPairingProvider['createPairingRelay']>>
     try {
-      relayPairing = await relayProvider.createPairingRelay(device.deviceId)
+      relayPairing = await relayProvider.createPairingRelay(
+        device.deviceId,
+        connectionMode === 'cloudflare-relay' ? cloudflareRelayUrl : undefined
+      )
     } catch (error) {
-      // Provider errors may contain credentials/metadata; log validated codes only.
       const relayFailure = mobileRelayMintFailureFromUnknown({
         stage: 'create_pairing_relay',
         error,
@@ -225,7 +237,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       generation !== this.mobilePairingOfferGeneration ||
       relayProvider !== this.mobileRelayPairingProvider ||
       currentDevice?.token !== device.token ||
-      this.deviceRegistry?.getMobilePairingConnectionMode(device.deviceId) !== 'automatic'
+      this.deviceRegistry?.getMobilePairingConnectionMode(device.deviceId) !== connectionMode
     ) {
       this.queueOrRetainRelayDeviceRevoke(device.deviceId, relayPairing.binding)
       if (createdNewPendingDevice) {
@@ -253,7 +265,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     }
     return {
       ...direct,
-      connectionMode: 'automatic',
+      connectionMode,
       pairingUrl: encodePairingOffer({
         v: PAIRING_OFFER_VERSION,
         endpoint: direct.endpoint,
@@ -279,7 +291,6 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     }
   }
 
-  /** Drop a never-scanned mobile pending credential after a failed Anywhere mint. */
   protected discardPendingMobilePairingDevice(deviceId: string): void {
     const device = this.deviceRegistry?.getDevice(deviceId)
     if (!device || device.scope !== 'mobile' || device.lastSeenAt !== 0) {
@@ -296,6 +307,4 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
       console.error('[runtime] Failed to drop an unused mobile pairing credential:', error)
     }
   }
-
-  /** If durable revoke enqueue fails, retain the device binding as the only remaining cleanup reference to the minted invite. */
 }

@@ -202,5 +202,11 @@ export function mobilePairingConnectionModeOf(
     return null
   }
   // Legacy pairings used automatic direct-first Relay fallback.
-  return device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic'
+  if (device.mobilePairingConnectionMode === 'local-only') {
+    return 'local-only'
+  }
+  if (device.mobilePairingConnectionMode === 'cloudflare-relay') {
+    return 'cloudflare-relay'
+  }
+  return 'automatic'
 }

@@ -13101,7 +13101,13 @@
           "localDescription": "Phone must be on this Wi‑Fi or connected through Tailscale. No account needed.",
           "retrying": "Retrying",
           "relayCell": "Relay cell",
-          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account."
+          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.",
+          "cloudflareTitle": "My Cloudflare Relay",
+          "cloudflareDescription": "Phone connects through your own Cloudflare Worker relay. HTTPS/WSS access and the matching Postgres/JWT setup are required.",
+          "cloudflareBadge": "Self-hosted",
+          "cloudflareUrlLabel": "Relay director hostname",
+          "cloudflareUrlPlaceholder": "https://relay.example.com",
+          "cloudflareUrlHint": "Use the Cloudflare URL shown in setup. Do not enter a local IP or a Worker route ending in /v1/connect."
         },
         "MobilePairingSetupSection": {
           "title": "Pair a phone",
