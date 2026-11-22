@@ -191,6 +191,8 @@ export class DesktopRelayService {
       params,
       waitMs: PHONE_REQUEST_READINESS_WAIT_MS,
       requireCustomBroker: (url) => this.requireCustomBroker(url),
+      getCloudflareRelayUrl: () =>
+        readMobilePairingCloudflareRelayUrl(this.runtimeRpc.requireStore().getSettings()),
       requireActiveBroker: (waitMs) => this.requireActiveBroker(waitMs),
       withTransientDemand: (key, operation) => this.withTransientDemand(key, operation),
       assertRelayHost: (relayContext, broker) => this.assertRelayHost(relayContext, broker),

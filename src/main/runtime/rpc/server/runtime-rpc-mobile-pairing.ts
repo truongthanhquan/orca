@@ -216,7 +216,7 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     try {
       relayPairing = await relayProvider.createPairingRelay(
         device.deviceId,
-        connectionMode === 'cloudflare-relay' ? cloudflareRelayUrl : undefined
+        connectionMode === 'cloudflare-relay' ? (cloudflareRelayUrl ?? undefined) : undefined
       )
     } catch (error) {
       const relayFailure = mobileRelayMintFailureFromUnknown({
