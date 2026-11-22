@@ -1,4 +1,4 @@
-export type MobilePairingConnectionMode = 'automatic' | 'local-only'
+export type MobilePairingConnectionMode = 'automatic' | 'local-only' | 'cloudflare-relay'
 
 /** Signed-out desktops default to LAN: Relay sign-in links an account and needs an explicit choice; persisted automatic does not prove consent.
  * Explicit Relay remains selectable; sign-in restores saved Anywhere. */
@@ -6,6 +6,9 @@ export function resolveMobilePairingConnectionMode(
   saved: MobilePairingConnectionMode | null | undefined,
   context: { signedIn: boolean }
 ): MobilePairingConnectionMode {
+  if (saved === 'cloudflare-relay') {
+    return 'cloudflare-relay'
+  }
   return saved === 'local-only' || !context.signedIn ? 'local-only' : 'automatic'
 }
 
@@ -26,4 +29,36 @@ export function canMintMobilePairingOffer(args: {
   signedIn: boolean
 }): boolean {
   return !(args.connectionMode === 'automatic' && !args.signedIn)
+}
+
+export function canonicalMobilePairingCloudflareRelayUrl(
+  value: string | null | undefined
+): string | null {
+  const trimmed = value?.trim() ?? ''
+  if (!/^https:\/\/[^/?#]+$/.test(trimmed)) {
+    return null
+  }
+  return trimmed
+}
+
+export function readMobilePairingCloudflareRelayUrl(settings: object): string | undefined {
+  if (
+    'mobilePairingCloudflareRelayUrl' in settings &&
+    typeof settings.mobilePairingCloudflareRelayUrl === 'string'
+  ) {
+    return settings.mobilePairingCloudflareRelayUrl
+  }
+  return undefined
+}
+
+export function normalizeMobilePairingConnectionMode(
+  value: MobilePairingConnectionMode | null | undefined
+): MobilePairingConnectionMode {
+  if (value === 'local-only') {
+    return 'local-only'
+  }
+  if (value === 'cloudflare-relay') {
+    return 'cloudflare-relay'
+  }
+  return 'automatic'
 }

@@ -90,7 +90,11 @@ export function normalizeLoadedDeviceRow(device: unknown): DeviceEntry | null {
     grants: validGrants(device.grants, device.scope === 'runtime' ? 'runtime' : 'mobile'),
     relayBinding: validRelayBinding(device.relayBinding, device.deviceId),
     mobilePairingConnectionMode:
-      device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic',
+      device.mobilePairingConnectionMode === 'local-only'
+        ? 'local-only'
+        : device.mobilePairingConnectionMode === 'cloudflare-relay'
+          ? 'cloudflare-relay'
+          : 'automatic',
     // Older grants reached the network; preserve all-interface binding on reconnect.
     pairingReach: device.pairingReach === 'this-computer' ? 'this-computer' : 'network',
     // Bad push metadata must not fail registry load and strand all devices.

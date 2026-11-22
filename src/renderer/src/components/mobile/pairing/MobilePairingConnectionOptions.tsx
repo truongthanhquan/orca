@@ -52,6 +52,9 @@ export function MobilePairingConnectionOptions({
   relayMintRetrying?: boolean
 }): React.JSX.Element {
   const t = useTranslate()
+  const cloudflareRelayUrl =
+    useAppStore((state) => state.settings?.mobilePairingCloudflareRelayUrl) ?? ''
+  const updateSettings = useAppStore((state) => state.updateSettings)
   const authStatus = useAppStore((state) => state.orcaProfileAuthStatus)
   const relayStatus = useMobileRelayStatus()
   const signedIn = authStatus?.state === 'connected'
@@ -64,7 +67,8 @@ export function MobilePairingConnectionOptions({
   const relayDisabled = relayMintRetrying || relayUnavailable
   const optionRefs = useRef<Record<MobilePairingConnectionMode, HTMLDivElement | null>>({
     automatic: null,
-    'local-only': null
+    'local-only': null,
+    'cloudflare-relay': null
   })
 
   // Wrap/focus radio arrow navigation, but leave nested Sign in controls’ arrows untouched.
@@ -80,8 +84,17 @@ export function MobilePairingConnectionOptions({
       return
     }
     event.preventDefault()
-    const next: MobilePairingConnectionMode =
-      relayDisabled || value === 'automatic' ? 'local-only' : 'automatic'
+    const modes: MobilePairingConnectionMode[] = relayDisabled
+      ? ['local-only', 'cloudflare-relay']
+      : ['automatic', 'cloudflare-relay', 'local-only']
+    const index = modes.indexOf(value)
+    const next =
+      modes[
+        (index +
+          (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) +
+          modes.length) %
+          modes.length
+      ]
     onChange(next)
     optionRefs.current[next]?.focus()
   }
@@ -106,7 +119,7 @@ export function MobilePairingConnectionOptions({
           tabIndex={value === 'automatic' && !relayDisabled ? 0 : -1}
           disabled={relayDisabled}
           positionInSet={1}
-          setSize={2}
+          setSize={3}
           optionRef={(el) => {
             optionRefs.current.automatic = el
           }}
@@ -171,10 +184,69 @@ export function MobilePairingConnectionOptions({
         ) : null}
         <div className="border-t border-border" />
         <MobilePairingPathOption
+          selected={value === 'cloudflare-relay'}
+          tabIndex={value === 'cloudflare-relay' ? 0 : -1}
+          positionInSet={2}
+          setSize={3}
+          optionRef={(el) => {
+            optionRefs.current['cloudflare-relay'] = el
+          }}
+          onSelect={() => onChange('cloudflare-relay')}
+          title={t(
+            'auto.components.settings.MobilePairingConnectionOptions.cloudflareTitle',
+            'My Cloudflare Relay'
+          )}
+          description={t(
+            'auto.components.settings.MobilePairingConnectionOptions.cloudflareDescription',
+            'Phone connects through your own Cloudflare Worker relay. HTTPS/WSS access and the matching Postgres/JWT setup are required.'
+          )}
+          trailing={
+            value === 'cloudflare-relay' ? (
+              <Badge variant="outline" className="text-[11px]">
+                {t(
+                  'auto.components.settings.MobilePairingConnectionOptions.cloudflareBadge',
+                  'Self-hosted'
+                )}
+              </Badge>
+            ) : null
+          }
+        />
+        {value === 'cloudflare-relay' ? (
+          <div className="border-t border-border/60 px-3 py-3">
+            <label className="mb-1 block text-xs font-medium" htmlFor="cloudflare-relay-url">
+              {t(
+                'auto.components.settings.MobilePairingConnectionOptions.cloudflareUrlLabel',
+                'Relay director hostname'
+              )}
+            </label>
+            <input
+              id="cloudflare-relay-url"
+              value={cloudflareRelayUrl}
+              onChange={(event) =>
+                void updateSettings({
+                  mobilePairingCloudflareRelayUrl: event.target.value.trim() || null
+                })
+              }
+              placeholder={t(
+                'auto.components.settings.MobilePairingConnectionOptions.cloudflareUrlPlaceholder',
+                'https://relay.example.com'
+              )}
+              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t(
+                'auto.components.settings.MobilePairingConnectionOptions.cloudflareUrlHint',
+                'Use the Cloudflare URL shown in setup. Do not enter a local IP or a Worker route ending in /v1/connect.'
+              )}
+            </p>
+          </div>
+        ) : null}
+        <div className="border-t border-border" />
+        <MobilePairingPathOption
           selected={value === 'local-only'}
           tabIndex={value === 'local-only' || relayDisabled ? 0 : -1}
-          positionInSet={2}
-          setSize={2}
+          positionInSet={3}
+          setSize={3}
           optionRef={(el) => {
             optionRefs.current['local-only'] = el
           }}

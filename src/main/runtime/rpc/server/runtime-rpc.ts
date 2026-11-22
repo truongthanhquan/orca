@@ -14,6 +14,10 @@ export class OrcaRuntimeRpcServer extends RuntimeRpcMobilePairing {
     super(options)
   }
 
+  requireStore() {
+    return this.runtime.requireStore()
+  }
+
   /** Why: test-only seam — runs one ownership check instead of waiting out the poll interval. */
   checkRuntimeMetadataOwnership(): Promise<void> {
     return this.metadataOwnershipWatch?.check() ?? Promise.resolve()

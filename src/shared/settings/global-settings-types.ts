@@ -438,7 +438,9 @@ export type GlobalSettings = GlobalSettingsBase & {
   /** Phone-fit PTY restore delay after the last mobile subscriber: null holds indefinitely; finite values clamp to 5s–60min. See docs/mobile-fit-hold.md. */
   mobileAutoRestoreFitMs: number | null
   /** New QR pairing: absent/automatic allows Relay + local; local-only restricts to same network. */
-  mobilePairingConnectionMode?: 'automatic' | 'local-only'
+  mobilePairingConnectionMode?: 'automatic' | 'local-only' | 'cloudflare-relay'
+  /** Canonical HTTPS origin of the user's self-hosted Cloudflare relay director. */
+  mobilePairingCloudflareRelayUrl?: string | null
   /** Explicit custom address restored when generating future mobile pairing codes. */
   mobilePairingCustomAddress?: string | null
   /** Saved custom addresses available in both mobile pairing pickers. */

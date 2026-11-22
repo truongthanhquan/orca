@@ -104,7 +104,8 @@ export const E2EE_KEY_UNAVAILABLE_GUIDANCE =
 
 export type MobileRelayPairingProvider = {
   createPairingRelay(
-    relayDeviceId: string
+    relayDeviceId: string,
+    relayUrlOverride?: string
   ): Promise<{ relay: PairingRelay; binding: RelayDeviceBinding }>
   onDeviceRevokeQueued(item: RelayRevokeOutboxItem): void
   onDemandStateChanged?(): void

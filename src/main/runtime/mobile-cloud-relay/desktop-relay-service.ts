@@ -20,10 +20,12 @@ import type {
   RelayDeviceBinding,
   RelayRevokeOutboxItem
 } from './pairing/relay-revoke-outbox'
-import { pairingAuthorizationForContext } from './pairing/relay-pairing-authorization'
 import { deriveRelayHostId } from './director/relay-http-client'
 import { RelayDemandLedger } from './demand/relay-demand-ledger'
 import { createRelayRegionPreferenceReader } from './region-selection/relay-region-preference-reader'
+import { createCustomRelayPairing, CustomRelayBrokerCache } from './custom-relay-broker'
+import { routeMobileRelayEndpoints, routeMobileRelayProvision } from './mobile-pairing-routing'
+import { readMobilePairingCloudflareRelayUrl } from '../../../shared/remote-runtime/pairing/mobile-pairing-connection-mode'
 
 type DesktopRelayServiceOptions = {
   authConfig: OrcaCloudAuthConfig
@@ -40,6 +42,11 @@ const PAIRING_MINT_READINESS_WAIT_MS = 20_000
 const PHONE_REQUEST_READINESS_WAIT_MS = 10_000
 
 export class DesktopRelayService {
+  private readonly authConfig: OrcaCloudAuthConfig
+  private readonly userDataPath: string
+  private readonly appVersion: string
+  private readonly statusPublisher: MobileRelayStatusPublisher
+  private readonly customRelayBroker = new CustomRelayBrokerCache()
   private readonly coordinator: RelayAuthCoordinator
   private readonly revokeOutbox: RelayRevokeOutbox
   private readonly runtimeRpc: OrcaRuntimeRpcServer
@@ -49,6 +56,10 @@ export class DesktopRelayService {
   private stopped = false
 
   constructor(options: DesktopRelayServiceOptions) {
+    this.authConfig = options.authConfig
+    this.userDataPath = options.userDataPath
+    this.appVersion = options.appVersion
+    this.statusPublisher = options.onStatus
     const keypair = options.runtimeRpc.getE2EEKeypair()
     const mobileSocketWiring = options.runtimeRpc.getMobileSocketWiring()
     if (!keypair || !mobileSocketWiring) {
@@ -114,8 +125,15 @@ export class DesktopRelayService {
   }
 
   async createPairingRelay(
-    relayDeviceId: string
+    relayDeviceId: string,
+    relayUrlOverride?: string
   ): Promise<{ relay: PairingRelay; binding: RelayDeviceBinding }> {
+    if (relayUrlOverride) {
+      return await this.withTransientDemand(`pairing:${relayDeviceId}`, async () => {
+        const broker = await this.requireCustomBroker(relayUrlOverride)
+        return await createCustomRelayPairing(broker, relayDeviceId)
+      })
+    }
     return await this.withTransientDemand(`pairing:${relayDeviceId}`, async () => {
       const broker = await this.requireActiveBroker(PAIRING_MINT_READINESS_WAIT_MS)
       const relay = await broker.createPairingRelay(relayDeviceId)
@@ -148,40 +166,17 @@ export class DesktopRelayService {
     params: PairingGetEndpointsParams
   ): Promise<PairingGetEndpointsResult> {
     this.requireMobileDevice(context.deviceId)
-    if (
-      this.runtimeRpc.getDeviceRegistry()?.getMobilePairingConnectionMode(context.deviceId) ===
-      'local-only'
-    ) {
-      return { v: 1, relay: null }
-    }
-    return await this.withTransientDemand(`endpoints:${context.deviceId}`, async () => {
-      const broker = await this.requireActiveBroker(PHONE_REQUEST_READINESS_WAIT_MS).catch(
-        () => null
-      )
-      if (!broker?.endpoint) {
-        return { v: 1, relay: null }
-      }
-      this.assertRelayHost(context, broker)
-      const result: PairingGetEndpointsResult = { v: 1, relay: broker.endpoint }
-      if (params.installReqId) {
-        result.installStatus = await broker.credentialInstallStatus(
-          context.deviceId,
-          params.installReqId
-        )
-      }
-      if (params.resumeConfirmReqId) {
-        if (
-          context.transport.transport !== 'relay' ||
-          context.transport.credentialKind !== 'resume'
-        ) {
-          throw new Error('resume_confirmation_unavailable')
-        }
-        result.resumeConfirmation = await broker.confirmResume(
-          context.transport.basisConnId,
-          params.resumeConfirmReqId
-        )
-      }
-      return result
+    return await routeMobileRelayEndpoints({
+      runtimeRpc: this.runtimeRpc,
+      context,
+      params,
+      waitMs: PHONE_REQUEST_READINESS_WAIT_MS,
+      requireCustomBroker: (url) => this.requireCustomBroker(url),
+      getCloudflareRelayUrl: () =>
+        readMobilePairingCloudflareRelayUrl(this.runtimeRpc.requireStore().getSettings()),
+      requireActiveBroker: (waitMs) => this.requireActiveBroker(waitMs),
+      withTransientDemand: (key, operation) => this.withTransientDemand(key, operation),
+      assertRelayHost: (relayContext, broker) => this.assertRelayHost(relayContext, broker)
     })
   }
 
@@ -190,34 +185,23 @@ export class DesktopRelayService {
     params: PairingProvisionRelayParams
   ): Promise<DeviceCredentialInstalled> {
     this.requireMobileDevice(context.deviceId)
-    if (
-      this.runtimeRpc.getDeviceRegistry()?.getMobilePairingConnectionMode(context.deviceId) ===
-      'local-only'
-    ) {
-      throw new Error('relay_disabled_for_device')
-    }
-    return await this.withTransientDemand(`provision:${context.deviceId}`, async () => {
-      const broker = await this.requireActiveBroker(PHONE_REQUEST_READINESS_WAIT_MS)
-      if (!broker.endpoint) {
-        throw new Error('relay_control_not_active')
-      }
-      this.assertRelayHost(context, broker)
-      const authorization = pairingAuthorizationForContext(context, broker.hostId)
-      if (!authorization) {
-        // Resume confirmation proves renewal, never either initial-install authorization mode.
-        throw new Error('relay_provision_authorization_unavailable')
-      }
-      if (
-        !this.runtimeRpc.setMobileRelayBinding(context.deviceId, {
+    return await routeMobileRelayProvision({
+      runtimeRpc: this.runtimeRpc,
+      context,
+      params,
+      waitMs: PHONE_REQUEST_READINESS_WAIT_MS,
+      requireCustomBroker: (url) => this.requireCustomBroker(url),
+      getCloudflareRelayUrl: () =>
+        readMobilePairingCloudflareRelayUrl(this.runtimeRpc.requireStore().getSettings()),
+      requireActiveBroker: (waitMs) => this.requireActiveBroker(waitMs),
+      withTransientDemand: (key, operation) => this.withTransientDemand(key, operation),
+      assertRelayHost: (relayContext, broker) => this.assertRelayHost(relayContext, broker),
+      setRelayBinding: (relayContext, broker) =>
+        this.runtimeRpc.setMobileRelayBinding(relayContext.deviceId, {
           relayHostId: broker.hostId,
-          relayDeviceId: context.deviceId,
+          relayDeviceId: relayContext.deviceId,
           ownerIdentityKey: broker.ownerIdentityKey
         })
-      ) {
-        throw new Error('mobile_device_not_found')
-      }
-      this.refreshDemand()
-      return await broker.installCredential(context.deviceId, params, authorization)
     })
   }
 
@@ -294,6 +278,23 @@ export class DesktopRelayService {
     throw new RelayUnavailableError(
       readiness.ready ? { reason: 'control_not_active', retryAt: null } : readiness
     )
+  }
+
+  private async requireCustomBroker(relayUrl: string): Promise<RelaySessionBroker> {
+    const keypair = this.runtimeRpc.getE2EEKeypair()
+    const mobileSocketWiring = this.runtimeRpc.getMobileSocketWiring()
+    if (!keypair || !mobileSocketWiring) {
+      throw new RelayUnavailableError({ reason: 'control_not_active', retryAt: null })
+    }
+    return await this.customRelayBroker.get({
+      authConfig: this.authConfig,
+      userDataPath: this.userDataPath,
+      appVersion: this.appVersion,
+      keypair,
+      mobileSocketWiring,
+      relayUrl,
+      onStatus: this.statusPublisher
+    })
   }
 
   private refreshDemand(): void {
